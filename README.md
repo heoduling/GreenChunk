@@ -1,12 +1,6 @@
-# GreenChunk
-
-Shows slime chunks with Minecraft's dialog UI or as a private in-world display.
+Shows slime chunks with dialog UI or as a 3D in-world display.
 
 ![Slime chunk dialog](assets/screenshot_20260802_214302-region.png)
-
-Paper/Folia 26.2 · Java 25
-
-Drop the jar into `plugins` and restart the server. Spigot is not supported.
 
 Use a slime ball by default:
 
