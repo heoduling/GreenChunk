@@ -1,83 +1,32 @@
-# If you can translate or create new languages please create a Pull Request
-# https://github.com/Hynse/GreenChunk
+# GreenChunk 2 configuration. Text supports MiniMessage formatting.
+item:
+  enabled: true
+  material: SLIME_BALL
 
+dialog:
+  width: 9
+  height: 6
+  title: '<dark_green>GreenChunk'
+  cell-symbol: '■'
+  close-button: '<red>Close'
+  close-tooltip: '<gray>Close the slime-chunk map'
 
-# If you want to change lang just uncomment that section
+visualization:
+  radius: 5
+  refresh-ticks: 4
+  block-material: LIME_STAINED_GLASS
+  view-range: 128.0
 
-### English ------------------------------------------------------
-# Configuration for the SlimeCommand
-slime-command:
-  messages:
-    not-in-chunk: "&cYou are not in a slime chunk (&e%d&7,&e%d&c)!"
-    in-chunk: "&aYou are in a slime chunk (&e%d&7,&e%d&a)!"
-    no-permission: '&cYou do not have permission to use this command!'
-    not-player: '&cYou must be a player to use this command!'
-# Configuration for the ReloadCommand
-reload-command:
-  messages:
-    reload-config: '&eGreenChunk config reloaded.'
-    no-permission: '&cYou do not have permission to use this command!'
-    error-reload-config: '&cSomething went wrong reloading GreenChunk config, see the console for more.'
-# Configuration for the Gui Map
-gui:
-  messages:
-    title: 'Slime Maps'
-    no-permission: '&cYou do not have permission to use this command!'
-    not-player: '&cYou must be a player to use this command!'
-    not-slimechunk: 'Not Slime Chunk'
-    is-slimechunk: 'Is Slime Chunk'
-    item: 'You do not have permission to use item!'
-# Slimemap Settings
-enableSlimeMapItem: true
-slimeMapItem: SLIME_BALL
-### ---------------------------------------------------------------
-
-
-### Chinese Simplified --------------------------------------------
-##slime-command:
-#  messages:
-#    not-in-chunk: '&c你不在X:&e%d&c, Z:&e%d&c的史莱姆区块内！'
-#    in-chunk: '&a你在X:&e%d&a, Z:&e%d&a的史莱姆区块内！'
-#    no-permission: '&c&c你没有权限使用这个指令！'
-#    not-player: '&c你必须是玩家才能使用该命令！'
-#reload-command:
-#  messages:
-#    reload-config: '&eGreenChunk配置已重新加载'
-#    no-permission: '&c你没有权限使用这个指令！'
-#    error-reload-config: '&c重新加载GreenChunk配置出现了问题，请查看控制台获取更多信息'
-#gui:
-#  messages:
-#    title: '史莱姆区块可视化GUI'
-#    no-permission: '&c你没有权限使用该命令！'
-#    not-player: '&c此命令必须在玩家执行！'
-#    not-slimechunk: '不是史莱姆区块'
-#    is-slimechunk: '是史莱姆区块'
-#    item: '&c你没有权限去使用它！'
-#enableSlimeMapItem: true
-#slimeMapItem: SLIME_BALL
-### ---------------------------------------------------------------
-
-
-### Thailand --------------------------------------------
-#slime-command:
-#  messages:
-#    not-in-chunk: "&cคุณไม่ได้อยู่ในสลามชักค์ (&e%d&7,&e%d)&c!"
-#    in-chunk: "&aคุณอยู่ในสลามชักค์ (&e%d&7,&e%d)&a!"
-#    no-permission: "&cคุณไม่มีสิทธิ์ในการใช้คำสั่งนี้!"
-#    not-player: "&cคุณต้องเป็นผู้เล่นเท่านั้นที่จะใช้คำสั่งนี้!"
-#reload-command:
-#  messages:
-#    reload-config: "&eGreenChunk รีโหลดคอนฟิกแล้ว"
-#    no-permission: "&cคุณไม่มีสิทธิ์ในการใช้คำสั่งนี้!"
-#    error-reload-config: "&cเกิดข้อผิดพลาดขณะโหลดคอนฟิก GreenChunk โปรดดูที่คอนโซลสำหรับข้อมูลเพิ่มเติม"
-#gui:
-#  messages:
-#    title: 'Slime Maps'
-#    no-permission: '&cYou do not have permission to use this command!'
-#    not-player: '&cYou must be a player to use this command!'
-#    not-slimechunk: 'Not Slime Chunk'
-#    is-slimechunk: 'Is Slime Chunk'
-#    item: 'You do not have permission to use item!'
-#enableSlimeMapItem: true
-#slimeMapItem: SLIME_BALL
-### ---------------------------------------------------------------
+messages:
+  in-slime-chunk: '<green>You are in a slime chunk <gray>(<yellow><x><gray>, <yellow><z><gray>)<green>!'
+  not-in-slime-chunk: '<red>You are not in a slime chunk <gray>(<yellow><x><gray>, <yellow><z><gray>)<red>!'
+  no-permission: '<red>You do not have permission to do that.'
+  player-only: '<red>Only players can use this command.'
+  map-disabled: '<red>The configured-item interaction is disabled.'
+  reload-success: '<yellow>GreenChunk configuration reloaded.'
+  reload-failure: '<red>GreenChunk could not reload. Check the server console.'
+  slime-chunk: '<green>Slime chunk'
+  normal-chunk: '<red>Normal chunk'
+  current-chunk: '<aqua>Your current chunk'
+  visualization-enabled: '<green>3D slime-chunk overlay enabled.'
+  visualization-disabled: '<yellow>3D slime-chunk overlay disabled.'

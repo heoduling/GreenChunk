@@ -101,6 +101,9 @@ $RECYCLE.BIN/
 *.lnk
 
 .gradle
+.gradle-local/
+.local-jdk25/
+.downloads/
 build/
 
 # Ignore Gradle GUI config

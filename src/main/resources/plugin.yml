@@ -1,31 +1,43 @@
 name: GreenChunk
-version: ${version}
-main: xyz.hynse.greenchunk.GreenChunk
-api-version: 1.19
+version: '${version}'
+main: th.in.midnight_network.greenchunk.GreenChunkPlugin
+description: A lightweight slime-chunk finder for modern Paper and Folia servers.
+api-version: '26.2'
 folia-supported: true
+authors: [Midnight Network]
+
 commands:
   slime:
+    description: Check whether your current chunk is a slime chunk.
     usage: /slime
+    permission: greenchunk.check
   slimemap:
+    description: Open the slime-chunk map.
     usage: /slimemap
+    permission: greenchunk.map
   greenchunkreload:
+    description: Reload GreenChunk's configuration.
     usage: /greenchunkreload
-    aliases:
-      - slimereload
+    aliases: [slimereload]
+    permission: greenchunk.reload
+  slimevisual:
+    description: Toggle the private in-world slime-chunk overlay.
+    usage: /slimevisual
+    permission: greenchunk.visual
+
 permissions:
-  greenchunk.map.item:
-    description: Allows players to use the slime map item.
+  greenchunk.check:
+    description: Check the current slime chunk.
     default: true
-  greenchunk.item:
-    description: Allows players to use check slime chunk with item.
+  greenchunk.map:
+    description: Open the slime-chunk map command.
+    default: true
+  greenchunk.item.map:
+    description: Open the dialog map by shift-right-clicking the configured item.
     default: true
   greenchunk.reload:
-    description: Reload the GreenChunk config
-    default: false
-  greenchunk.map:
-    description: Open slimechunk map around current position
+    description: Reload GreenChunk's configuration.
+    default: op
+  greenchunk.visual:
+    description: Use the private BlockDisplay slime-chunk overlay.
     default: true
-  greenchunk.check:
-    description: Check slime at current position
-    default: true
-
