@@ -1,0 +1,36 @@
+# GreenChunk 2 configuration. Text supports MiniMessage formatting.
+config-version: 2
+# Legacy item enable/material and messages are migrated automatically on first start.
+item:
+  enabled: true
+  material: SLIME_BALL
+
+dialog:
+  width: 9
+  height: 6
+  title: '<dark_green>GreenChunk'
+  cell-symbol: '■'
+  close-button: '<red>Close'
+  close-tooltip: '<gray>Close the slime-chunk map'
+
+visualization:
+  # 1..4 chunks. Queries use the server rules and can asynchronously load/generate terrain.
+  radius: 4
+  # Minimum 5 ticks; only one query per player is allowed in flight.
+  refresh-ticks: 5
+  block-material: LIME_STAINED_GLASS
+  view-range: 128.0
+
+messages:
+  in-slime-chunk: '<green>You are in a slime chunk <gray>(<yellow><x><gray>, <yellow><z><gray>)<green>!'
+  not-in-slime-chunk: '<red>You are not in a slime chunk <gray>(<yellow><x><gray>, <yellow><z><gray>)<red>!'
+  no-permission: '<red>You do not have permission to do that.'
+  player-only: '<red>Only players can use this command.'
+  map-disabled: '<red>The configured-item interaction is disabled.'
+  reload-success: '<yellow>GreenChunk configuration reloaded.'
+  reload-failure: '<red>GreenChunk could not reload. Check the server console.'
+  slime-chunk: '<green>Slime chunk'
+  normal-chunk: '<red>Normal chunk'
+  current-chunk: '<aqua>Your current chunk'
+  visualization-enabled: '<green>3D slime-chunk overlay enabled.'
+  visualization-disabled: '<yellow>3D slime-chunk overlay disabled.'

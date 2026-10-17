@@ -38,6 +38,47 @@ public final class GreenChunkProbe extends JavaPlugin {
                     player.removeAttachment(attachment);
                 }
                 if (args[0].equals("close")) player.closeDialog();
+                if (args[0].equals("foreign")) {
+                    player.showDialog(io.papermc.paper.dialog.Dialog.create(factory -> factory.empty()
+                            .base(io.papermc.paper.registry.data.dialog.DialogBase.builder(
+                                    net.kyori.adventure.text.Component.text("其他插件测试面板"))
+                                    .canCloseWithEscape(true).build())
+                            .type(io.papermc.paper.registry.data.dialog.type.DialogType.multiAction(java.util.List.of(
+                                    io.papermc.paper.registry.data.dialog.ActionButton.builder(
+                                            net.kyori.adventure.text.Component.text("关闭")).build()))
+                                    .build())));
+                }
+                if (args[0].equals("pipeline") || args[0].equals("holdqueue")) {
+                    Object handle = player.getClass().getMethod("getHandle").invoke(player);
+                    Object listener = handle.getClass().getField("connection").get(handle);
+                    Object connection = listener.getClass().getField("connection").get(listener);
+                    var channel = (io.netty.channel.Channel) connection.getClass().getField("channel").get(connection);
+                    channel.eventLoop().execute(() -> getLogger().info("GC_DIALOG_HANDLER=" +
+                            channel.pipeline().names().stream().filter(n -> n.equals("greenchunk-dialog")).count()));
+                    if (args[0].equals("holdqueue")) {
+                        var flagField = connection.getClass().getDeclaredField("flushingQueue");
+                        flagField.setAccessible(true);
+                        var flag = (java.util.concurrent.atomic.AtomicBoolean) flagField.get(connection);
+                        if (!flag.compareAndSet(false, true)) throw new IllegalStateException("Queue already flushing");
+                        getLogger().info("GC_DIALOG_QUEUE_HELD");
+                        Bukkit.getAsyncScheduler().runDelayed(this, task -> {
+                            try {
+                                flag.set(false);
+                                var flush = connection.getClass().getDeclaredMethod("flushQueue");
+                                flush.setAccessible(true);
+                                flush.invoke(connection);
+                                getLogger().info("GC_DIALOG_QUEUE_RELEASED");
+                            } catch (ReflectiveOperationException error) { throw new IllegalStateException(error); }
+                        }, 5, java.util.concurrent.TimeUnit.SECONDS);
+                    }
+                }
+                if (args[0].equals("grantunload")) {
+                    var attachment = player.addAttachment(this);
+                    attachment.setPermission("plugman.help", false);
+                    attachment.setPermission("plugman.unload", true);
+                    getLogger().info("GC_RESULT operation-only-permission=" +
+                            (!player.hasPermission("plugman.help") && player.hasPermission("plugman.unload")));
+                }
             }
         } catch (ReflectiveOperationException error) { throw new IllegalStateException(error); }
         return true;

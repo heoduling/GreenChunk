@@ -15,7 +15,6 @@ import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
-import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.World;
@@ -28,6 +27,14 @@ public final class SlimeMapService {
     private final Set<UUID> pending = ConcurrentHashMap.newKeySet();
     private final ConfigService configs;
     private final SlimeChunkService slimeChunks;
+    private volatile boolean closed;
+    private final DialogSessions dialogs = new DialogSessions();
+
+    public void close() { closed = true; pending.clear(); }
+
+    public java.util.concurrent.CompletableFuture<Void> closeDialogsForUnload() { return dialogs.closeForUnload(); }
+
+    public void detachDialogs() { dialogs.detach(); }
 
     public SlimeMapService(Plugin plugin, ConfigService configs, SlimeChunkService slimeChunks) {
         this.plugin = plugin;
@@ -44,6 +51,7 @@ public final class SlimeMapService {
     }
 
     private void request(Player player, boolean checkOnly) {
+        if (closed) return;
         UUID id = player.getUniqueId();
         if (!pending.add(id)) return;
         var config = configs.current();
@@ -64,20 +72,22 @@ public final class SlimeMapService {
         int minZ = cells.stream().mapToInt(ChunkPos::z).min().orElseThrow();
         int maxZ = cells.stream().mapToInt(ChunkPos::z).max().orElseThrow();
         slimeChunks.scan(world, minX, minZ, maxX - minX + 1, maxZ - minZ + 1).whenComplete((values, error) -> {
-            if (!plugin.isEnabled()) { pending.remove(id); return; }
+            if (closed || !plugin.isEnabled()) { pending.remove(id); return; }
             try {
                 var task = player.getScheduler().run(plugin, ignored -> {
                     pending.remove(id);
+                    if (closed) return;
                     var now = player.getLocation();
                     if (now.getWorld() != world || now.getBlockX() >> 4 != centerX
                             || now.getBlockZ() >> 4 != centerZ || configs.current() != config) return;
                     if (error != null) {
                         player.sendMessage(Component.text("区块查询暂时失败，请稍后重试。", NamedTextColor.RED));
-                        plugin.getLogger().warning("Slime chunk query failed: " + error);
+                        plugin.getLogger().warning("史莱姆区块查询失败：" + error);
                         return;
                     }
                     if (checkOnly) player.sendMessage(configs.slimeResult(values.get(new ChunkPos(centerX, centerZ)),
-                            location.getBlockX(), location.getBlockZ()));
+                            location.getBlockX(), location.getBlockZ())
+                            .append(Component.newline()).append(config.messages().spawnNotice()));
                     else show(player, config, location, values);
                 }, () -> pending.remove(id));
                 if (task == null) pending.remove(id);
@@ -109,20 +119,21 @@ public final class SlimeMapService {
                 .tooltip(config.dialog().closeTooltip())
                 .width(100)
                 .action(io.papermc.paper.registry.data.dialog.action.DialogAction.customClick(
-                        (response, audience) -> audience.closeDialog(),
-                        ClickCallback.Options.builder().uses(1).build()))
+                        net.kyori.adventure.key.Key.key("greenchunk:close"), null))
                 .build();
         Dialog dialog = Dialog.create(factory -> factory.empty()
                 .base(DialogBase.builder(config.dialog().title())
                         .canCloseWithEscape(true)
                         .pause(false)
                         .afterAction(DialogBase.DialogAfterAction.CLOSE)
-                        .body(List.of(DialogBody.plainMessage(status, 320)))
+                        .body(List.of(DialogBody.plainMessage(status, 320),
+                                DialogBody.plainMessage(config.messages().spawnNotice(), 320)))
                         .build())
                 .type(DialogType.multiAction(cells)
                         .columns(width)
                         .exitAction(close)
                         .build()));
+        dialogs.track(player, dialog);
         player.showDialog(dialog);
     }
 
@@ -136,13 +147,13 @@ public final class SlimeMapService {
         int maxZ = minZ + 15;
         int centerX = minX + 8;
         int centerZ = minZ + 8;
-        Component tooltip = Component.text("Chunk X: " + chunkX + "  Z: " + chunkZ, NamedTextColor.YELLOW)
+        Component tooltip = Component.text("区块坐标 X: " + chunkX + "  Z: " + chunkZ, NamedTextColor.YELLOW)
                 .append(Component.newline())
-                .append(Component.text("Center X: " + centerX + "  Z: " + centerZ, NamedTextColor.WHITE))
+                .append(Component.text("中心坐标 X: " + centerX + "  Z: " + centerZ, NamedTextColor.WHITE))
                 .append(Component.newline())
-                .append(Component.text("Blocks X: " + minX + " to " + maxX, NamedTextColor.GRAY))
+                .append(Component.text("方块范围 X: " + minX + " 至 " + maxX, NamedTextColor.GRAY))
                 .append(Component.newline())
-                .append(Component.text("Blocks Z: " + minZ + " to " + maxZ, NamedTextColor.GRAY))
+                .append(Component.text("方块范围 Z: " + minZ + " 至 " + maxZ, NamedTextColor.GRAY))
                 .append(Component.newline())
                 .append(type);
         if (current) {
@@ -152,8 +163,7 @@ public final class SlimeMapService {
                 .tooltip(tooltip)
                 .width(30)
                 .action(io.papermc.paper.registry.data.dialog.action.DialogAction.customClick(
-                        (response, audience) -> audience.closeDialog(),
-                        ClickCallback.Options.builder().uses(1).build()))
+                        net.kyori.adventure.key.Key.key("greenchunk:close"), null))
                 .build();
     }
 

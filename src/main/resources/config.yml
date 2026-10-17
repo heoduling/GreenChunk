@@ -1,6 +1,6 @@
-# GreenChunk 2 configuration. Text supports MiniMessage formatting.
-config-version: 2
-# Legacy item enable/material and messages are migrated automatically on first start.
+# GreenChunk 配置。文本支持 MiniMessage 颜色标签，坐标占位符为 <x> 和 <z>。
+config-version: 4
+# 首次升级自动迁移旧配置。保留物品开关、材质和自定义消息。
 item:
   enabled: true
   material: SLIME_BALL
@@ -8,29 +8,31 @@ item:
 dialog:
   width: 9
   height: 6
-  title: '<dark_green>GreenChunk'
+  title: '<dark_green>史莱姆区块地图'
   cell-symbol: '■'
-  close-button: '<red>Close'
-  close-tooltip: '<gray>Close the slime-chunk map'
+  close-button: '<red>关闭'
+  close-tooltip: '<gray>关闭史莱姆区块地图'
 
 visualization:
-  # 1..4 chunks. Queries use the server rules and can asynchronously load/generate terrain.
+  # 扫描半径：1–4 个区块。按核心规则查询，会异步加载或生成范围内的地形。
   radius: 4
-  # Minimum 5 ticks; only one query per player is allowed in flight.
+  # 刷新间隔，至少 5 tick；每名玩家同一时间只执行一次三维显示查询。
   refresh-ticks: 5
   block-material: LIME_STAINED_GLASS
   view-range: 128.0
 
 messages:
-  in-slime-chunk: '<green>You are in a slime chunk <gray>(<yellow><x><gray>, <yellow><z><gray>)<green>!'
-  not-in-slime-chunk: '<red>You are not in a slime chunk <gray>(<yellow><x><gray>, <yellow><z><gray>)<red>!'
-  no-permission: '<red>You do not have permission to do that.'
-  player-only: '<red>Only players can use this command.'
-  map-disabled: '<red>The configured-item interaction is disabled.'
-  reload-success: '<yellow>GreenChunk configuration reloaded.'
-  reload-failure: '<red>GreenChunk could not reload. Check the server console.'
-  slime-chunk: '<green>Slime chunk'
-  normal-chunk: '<red>Normal chunk'
-  current-chunk: '<aqua>Your current chunk'
-  visualization-enabled: '<green>3D slime-chunk overlay enabled.'
-  visualization-disabled: '<yellow>3D slime-chunk overlay disabled.'
+  in-slime-chunk: '<green>当前位置属于史莱姆区块<gray>（X: <yellow><x><gray>，Z: <yellow><z><gray>）<green>。'
+  not-in-slime-chunk: '<red>当前位置不属于史莱姆区块<gray>（X: <yellow><x><gray>，Z: <yellow><z><gray>）<red>。'
+  no-permission: '<red>你没有权限执行此操作。'
+  player-only: '<red>此命令只能由玩家执行。'
+  map-disabled: '<red>使用指定物品交互的功能已关闭。'
+  reload-success: '<yellow>GreenChunk 配置已重新加载。'
+  reload-failure: '<red>GreenChunk 配置重载失败，请查看服务器控制台。'
+  slime-chunk: '<green>史莱姆区块'
+  normal-chunk: '<red>非史莱姆区块'
+  current-chunk: '<aqua>你当前所在的区块'
+  visualization-enabled: '<green>已开启史莱姆区块三维显示，仅自己可见。'
+  visualization-disabled: '<yellow>已关闭史莱姆区块三维显示。'
+  # 在聊天查询、地图和开启三维显示时提示；不改变核心的区块判定。
+  spawn-notice: '<gray>标记仅表示史莱姆区块，不保证能自然刷怪；还需满足群系、维度和生成条件。沼泽地表刷怪不以此标记为准。'

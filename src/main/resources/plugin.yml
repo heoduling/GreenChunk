@@ -1,48 +1,52 @@
 name: GreenChunk
 version: '${version}'
 main: th.in.midnight_network.greenchunk.GreenChunkPlugin
-description: A lightweight slime-chunk finder for modern Paper and Folia servers.
+description: 适用于 Folia / Shiroha 26.2 的史莱姆区块查询与三维显示插件。
 api-version: '26.2'
 folia-supported: true
 authors: [Midnight Network]
 
 commands:
   slime:
-    description: Check whether your current chunk is a slime chunk.
+    description: 查询当前位置是否属于史莱姆区块。
     usage: /slime
     permission: greenchunk.check
+    permission-message: '§c你没有权限执行此操作。'
   slimemap:
-    description: Open the slime-chunk map.
+    description: 打开史莱姆区块地图。
     usage: /slimemap
     permission: greenchunk.map
+    permission-message: '§c你没有权限执行此操作。'
   greenchunkreload:
-    description: Reload GreenChunk's configuration.
+    description: 重新加载 GreenChunk 配置。
     usage: /greenchunkreload
     aliases: [slimereload]
     permission: greenchunk.reload
+    permission-message: '§c你没有权限执行此操作。'
   slimevisual:
-    description: Toggle the private in-world slime-chunk overlay.
+    description: 开启或关闭仅自己可见的史莱姆区块三维显示。
     usage: /slimevisual
     permission: greenchunk.visual
+    permission-message: '§c你没有权限执行此操作。'
 
 permissions:
   greenchunk.check:
-    description: Check the current slime chunk.
+    description: 查询当前区块。
     default: true
   greenchunk.map:
-    description: Open the slime-chunk map command.
+    description: 使用史莱姆区块地图命令。
     default: true
   greenchunk.item.map:
-    description: Open the dialog map by shift-right-clicking the configured item.
+    description: 潜行并右键使用指定物品打开地图。
     default: true
   greenchunk.map.item:
-    description: Legacy permission alias for configured-item maps.
+    description: 旧版物品地图权限的兼容别名。
     default: true
     children:
       greenchunk.item.map: true
   greenchunk.reload:
-    description: Reload GreenChunk's configuration.
+    description: 重新加载 GreenChunk 配置。
     default: op
   greenchunk.visual:
-    description: Use the private BlockDisplay slime-chunk overlay.
+    description: 使用仅自己可见的史莱姆区块三维显示。
     default: true

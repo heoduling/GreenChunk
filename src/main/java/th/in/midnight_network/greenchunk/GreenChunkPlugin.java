@@ -1,6 +1,9 @@
 package th.in.midnight_network.greenchunk;
 
 import java.util.Objects;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import th.in.midnight_network.greenchunk.lifecycle.HotReloadSupport;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 import th.in.midnight_network.greenchunk.command.CheckCommand;
@@ -19,6 +22,7 @@ public final class GreenChunkPlugin extends JavaPlugin {
     private ChunkVisualizationService visualization;
     private VisualizationStateStore visualizationState;
     private SlimeChunkService slimeChunks;
+    private SlimeMapService slimeMap;
 
     @Override
     public void onEnable() {
@@ -30,7 +34,7 @@ public final class GreenChunkPlugin extends JavaPlugin {
         visualizationState = new VisualizationStateStore(this);
         visualizationState.load();
         visualization = new ChunkVisualizationService(this, configService, slimeChunks, visualizationState);
-        var slimeMap = new SlimeMapService(this, configService, slimeChunks);
+        slimeMap = new SlimeMapService(this, configService, slimeChunks);
 
         command("slime").setExecutor(new CheckCommand(configService, slimeMap));
         command("slimemap").setExecutor(new MapCommand(configService, slimeMap));
@@ -38,14 +42,18 @@ public final class GreenChunkPlugin extends JavaPlugin {
         command("slimevisual").setExecutor(new VisualCommand(configService, visualization));
 
         var pluginManager = getServer().getPluginManager();
+        pluginManager.registerEvents(slimeChunks, this);
         pluginManager.registerEvents(new PlayerInteractionListener(configService, slimeMap, visualization), this);
         pluginManager.registerEvents(visualization, this);
+        pluginManager.registerEvents(new HotReloadSupport(this, this::prepareHotUnload), this);
+        visualization.restoreOnlinePlayers();
 
-        getLogger().info("GreenChunk 2 enabled for Paper/Folia 26.2.");
+        getLogger().info("GreenChunk 已启用，适用于 Folia / Shiroha 26.2。");
     }
 
     @Override
     public void onDisable() {
+        if (slimeMap != null) { slimeMap.close(); slimeMap.detachDialogs(); }
         if (slimeChunks != null) slimeChunks.close();
         if (visualization != null) {
             visualization.stopAll();
@@ -55,7 +63,19 @@ public final class GreenChunkPlugin extends JavaPlugin {
         }
     }
 
+    private CompletableFuture<Void> prepareHotUnload() {
+        slimeMap.close();
+        visualization.stopAccepting();
+        var barriers = new ArrayList<CompletableFuture<Void>>();
+        for (var player : getServer().getOnlinePlayers()) {
+            barriers.add(HotReloadSupport.onOwner(this, player, () -> {}));
+        }
+        return CompletableFuture.allOf(barriers.toArray(CompletableFuture<?>[]::new)).thenCompose(ignored ->
+                CompletableFuture.allOf(slimeMap.closeDialogsForUnload(), visualization.removeForUnload(),
+                        slimeChunks.drain(), visualizationState.flushForUnload()));
+    }
+
     private PluginCommand command(String name) {
-        return Objects.requireNonNull(getCommand(name), "Command missing from plugin.yml: " + name);
+        return Objects.requireNonNull(getCommand(name), "plugin.yml 中缺少命令：" + name);
     }
 }

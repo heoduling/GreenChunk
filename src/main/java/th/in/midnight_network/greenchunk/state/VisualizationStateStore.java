@@ -16,6 +16,7 @@ public final class VisualizationStateStore {
     private final Plugin plugin;
     private final File file;
     private final Set<UUID> enabledPlayers = ConcurrentHashMap.newKeySet();
+    private boolean closed;
 
     public VisualizationStateStore(Plugin plugin) {
         this.plugin = plugin;
@@ -32,7 +33,7 @@ public final class VisualizationStateStore {
             try {
                 enabledPlayers.add(UUID.fromString(value));
             } catch (IllegalArgumentException exception) {
-                plugin.getLogger().warning("Ignoring invalid player UUID in " + file.getName() + ": " + value);
+                plugin.getLogger().warning("已忽略文件中的无效玩家 UUID：" + file.getName() + ": " + value);
             }
         }
     }
@@ -55,9 +56,27 @@ public final class VisualizationStateStore {
     }
 
     public synchronized void saveNow() {
+        if (closed) return;
+        try { write(); }
+        catch (IOException exception) { plugin.getLogger().log(Level.SEVERE, "无法保存文件：" + file.getName(), exception); }
+    }
+
+    public java.util.concurrent.CompletableFuture<Void> flushForUnload() {
+        var result = new java.util.concurrent.CompletableFuture<Void>();
+        try {
+            plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
+                try {
+                    synchronized (this) { closed = true; write(); }
+                    result.complete(null);
+                } catch (IOException | RuntimeException error) { result.completeExceptionally(error); }
+            });
+        } catch (RuntimeException error) { result.completeExceptionally(error); }
+        return result;
+    }
+
+    private void write() throws IOException {
         if (!plugin.getDataFolder().isDirectory() && !plugin.getDataFolder().mkdirs()) {
-            plugin.getLogger().severe("Could not create the GreenChunk data directory.");
-            return;
+            throw new IOException("无法创建 GreenChunk 数据目录。");
         }
         List<String> values = enabledPlayers.stream()
                 .sorted(Comparator.comparing(UUID::toString))
@@ -65,10 +84,6 @@ public final class VisualizationStateStore {
                 .toList();
         YamlConfiguration data = new YamlConfiguration();
         data.set(PATH, values);
-        try {
-            data.save(file);
-        } catch (IOException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Could not save " + file.getName(), exception);
-        }
+        data.save(file);
     }
 }

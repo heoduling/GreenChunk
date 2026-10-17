@@ -27,7 +27,7 @@ public final class ReloadCommand implements CommandExecutor {
             visualization.reloadActive();
             sender.sendMessage(configs.current().messages().reloadSuccess());
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to reload configuration", exception);
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "配置重载失败", exception);
             sender.sendMessage(configs.current().messages().reloadFailure());
         }
         return true;

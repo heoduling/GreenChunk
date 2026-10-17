@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'th.in.midnight_network'
-version = '2.0.0-1'
+version = '2.0.0-6'
 
 repositories {
     mavenCentral()
@@ -14,6 +14,8 @@ repositories {
 }
 
 dependencies {
+    compileOnly 'io.netty:netty-transport:4.2.15.Final'
+    testImplementation 'io.netty:netty-transport:4.2.15.Final'
     if (project.hasProperty('serverLibraries')) {
         compileOnly fileTree(project.property('serverLibraries')) { include '*.jar' }
         testImplementation fileTree(project.property('serverLibraries')) { include '*.jar' }

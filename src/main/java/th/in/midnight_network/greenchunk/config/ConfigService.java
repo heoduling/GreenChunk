@@ -30,14 +30,21 @@ public final class ConfigService {
         var config = plugin.getConfig();
         var backup = plugin.getDataFolder().toPath().resolve("config-v1-backup.yml");
         try (var stream = plugin.getResource("config.yml")) {
-            if (stream == null) throw new IllegalStateException("Missing default config.yml");
+            if (stream == null) throw new IllegalStateException("缺少默认配置 config.yml");
             if (config.contains("enableSlimeMapItem", true) && !Files.exists(backup)) {
                 Files.copy(plugin.getDataFolder().toPath().resolve("config.yml"), backup);
             }
             var defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            var chineseBackup = plugin.getDataFolder().toPath().resolve("config-before-zh-v4-backup.yml");
+            // Read the stored version, not the attached resource defaults.
+            Object storedVersion = config.getValues(false).get("config-version");
+            if (!(storedVersion instanceof Number number && number.intValue() >= 4)
+                    && !Files.exists(chineseBackup)) {
+                Files.copy(plugin.getDataFolder().toPath().resolve("config.yml"), chineseBackup);
+            }
             if (ConfigMigration.merge(config, defaults)) plugin.saveConfig();
         } catch (IOException exception) {
-            throw new IllegalStateException("Could not migrate GreenChunk configuration", exception);
+            throw new IllegalStateException("无法迁移 GreenChunk 配置", exception);
         }
         current = read(plugin.getConfig());
     }
@@ -56,7 +63,7 @@ public final class ConfigService {
         int dialogHeight = Math.clamp(config.getInt("dialog.height", 6), 1, 10);
         String cellSymbol = config.getString("dialog.cell-symbol", "■");
         if (cellSymbol.isBlank()) {
-            plugin.getLogger().warning("dialog.cell-symbol cannot be blank; using ■.");
+            plugin.getLogger().warning("dialog.cell-symbol 不能为空，已使用 ■。");
             cellSymbol = "■";
         }
 
@@ -64,10 +71,10 @@ public final class ConfigService {
                 new PluginConfig.ItemSettings(config.getBoolean("item.enabled", true), itemMaterial),
                 new PluginConfig.DialogSettings(
                         dialogWidth, dialogHeight,
-                        component(config, "dialog.title", "<dark_green>GreenChunk"),
+                        component(config, "dialog.title", "<dark_green>史莱姆区块地图"),
                         cellSymbol,
-                        component(config, "dialog.close-button", "<red>Close"),
-                        component(config, "dialog.close-tooltip", "<gray>Close the slime-chunk map")
+                        component(config, "dialog.close-button", "<red>关闭"),
+                        component(config, "dialog.close-tooltip", "<gray>关闭史莱姆区块地图")
                 ),
                 new PluginConfig.Visualization(
                         Math.clamp(config.getInt("visualization.radius", 2), 1, 4),
@@ -76,18 +83,19 @@ public final class ConfigService {
                         Math.clamp((float) config.getDouble("visualization.view-range", 5.0D), 1.0F, 128.0F)
                 ),
                 new PluginConfig.Messages(
-                        text(config, "messages.in-slime-chunk", "<green>You are in a slime chunk!"),
-                        text(config, "messages.not-in-slime-chunk", "<red>You are not in a slime chunk!"),
-                        component(config, "messages.no-permission", "<red>You do not have permission to do that."),
-                        component(config, "messages.player-only", "<red>Only players can use this command."),
-                        component(config, "messages.map-disabled", "<red>The slime-chunk map is disabled."),
-                        component(config, "messages.reload-success", "<yellow>GreenChunk configuration reloaded."),
-                        component(config, "messages.reload-failure", "<red>GreenChunk could not reload."),
-                        component(config, "messages.slime-chunk", "<green>Slime chunk"),
-                        component(config, "messages.normal-chunk", "<red>Normal chunk"),
-                        component(config, "messages.current-chunk", "<aqua>Your current chunk"),
-                        component(config, "messages.visualization-enabled", "<green>3D slime-chunk overlay enabled."),
-                        component(config, "messages.visualization-disabled", "<yellow>3D slime-chunk overlay disabled.")
+                        text(config, "messages.in-slime-chunk", "<green>当前位置属于史莱姆区块。"),
+                        text(config, "messages.not-in-slime-chunk", "<red>当前位置不属于史莱姆区块。"),
+                        component(config, "messages.no-permission", "<red>你没有权限执行此操作。"),
+                        component(config, "messages.player-only", "<red>此命令只能由玩家执行。"),
+                        component(config, "messages.map-disabled", "<red>使用指定物品交互的功能已关闭。"),
+                        component(config, "messages.reload-success", "<yellow>GreenChunk 配置已重新加载。"),
+                        component(config, "messages.reload-failure", "<red>GreenChunk 配置重载失败，请查看服务器控制台。"),
+                        component(config, "messages.slime-chunk", "<green>史莱姆区块"),
+                        component(config, "messages.normal-chunk", "<red>非史莱姆区块"),
+                        component(config, "messages.current-chunk", "<aqua>你当前所在的区块"),
+                        component(config, "messages.visualization-enabled", "<green>已开启史莱姆区块三维显示，仅自己可见。"),
+                        component(config, "messages.visualization-disabled", "<yellow>已关闭史莱姆区块三维显示。"),
+                        component(config, "messages.spawn-notice", "<gray>标记仅表示史莱姆区块，不保证能自然刷怪；还需满足群系、维度和生成条件。沼泽地表刷怪不以此标记为准。")
                 ));
     }
 
@@ -96,7 +104,7 @@ public final class ConfigService {
         Material material = Material.matchMaterial(name);
         boolean valid = material != null && (requireItem ? material.isItem() : material.isBlock());
         if (!valid) {
-            plugin.getLogger().warning("Invalid " + path + " '" + name + "'; using " + fallback + '.');
+            plugin.getLogger().warning("配置 " + path + " 的材质 '" + name + "' 无效，已使用 " + fallback + '。');
             return fallback;
         }
         return material;

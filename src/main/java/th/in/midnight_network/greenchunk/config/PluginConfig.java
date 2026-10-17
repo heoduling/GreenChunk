@@ -17,5 +17,6 @@ public record PluginConfig(ItemSettings item, DialogSettings dialog,
                            Component noPermission, Component playerOnly, Component mapDisabled,
                            Component reloadSuccess, Component reloadFailure,
                            Component slimeChunk, Component normalChunk, Component currentChunk,
-                           Component visualizationEnabled, Component visualizationDisabled) {}
+                           Component visualizationEnabled, Component visualizationDisabled,
+                           Component spawnNotice) {}
 }

@@ -9,6 +9,105 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ConfigMigrationTest {
+    @Test void repairsScreenshotTextsInAlreadyUpgradedConfiguration() throws Exception {
+        var config = resource("config.yml");
+        config.set("config-version", 3);
+        config.set("dialog.title", "Slime Maps");
+        config.set("messages.normal-chunk", "<yellow><bold>Not Slime Chunk</bold></yellow>");
+        config.set("messages.slime-chunk", "<green><bold>Is Slime Chunk</bold></green>");
+        config.set("messages.not-in-slime-chunk", "<red>You are not in a slime chunk (<yellow><x><gray>,<yellow><z><red>)!");
+        config.set("messages.in-slime-chunk", "<green>You are in a slime chunk (<yellow><x><gray>,<yellow><z><green>)!");
+        var defaults = resource("config.yml");
+        assertTrue(ConfigMigration.merge(config, defaults));
+        for (String key : List.of("dialog.title", "messages.normal-chunk", "messages.slime-chunk",
+                "messages.in-slime-chunk", "messages.not-in-slime-chunk")) {
+            assertEquals(defaults.getString(key), config.getString(key), key);
+        }
+        assertFalse(ConfigMigration.merge(config, defaults));
+    }
+
+    @Test void translatesOriginalLegacyDefaultsBeforeAndAfterSerialization() throws Exception {
+        var config = new YamlConfiguration();
+        config.set("gui.messages.title", "Slime Maps");
+        config.set("gui.messages.not-slimechunk", "§e§lNot Slime Chunk");
+        config.set("slime-command.messages.not-in-chunk", "&cYou are not in a slime chunk (&e%d&7,&e%d&c)!");
+        config.set("slime-command.messages.no-permission", "&cYou do not have permission to use this command!");
+        config.set("enableSlimeMapItem", false);
+        var defaults = resource("config.yml");
+        config.setDefaults(defaults);
+        assertTrue(ConfigMigration.merge(config, defaults));
+        for (String key : List.of("dialog.title", "messages.normal-chunk", "messages.not-in-slime-chunk", "messages.no-permission")) {
+            assertEquals(defaults.getString(key), config.getString(key), key);
+        }
+        assertFalse(config.getBoolean("item.enabled"));
+    }
+
+    @Test void preservesCustomTextDuringScreenshotRepair() throws Exception {
+        var config = resource("config.yml");
+        config.set("config-version", 3);
+        config.set("dialog.title", "<gold>My Slime Maps");
+        config.set("messages.normal-chunk", "<yellow>Not Slime Chunk - custom");
+        config.set("messages.in-slime-chunk", "<green>自定义 <x> <z>");
+        ConfigMigration.merge(config, resource("config.yml"));
+        assertEquals("<gold>My Slime Maps", config.getString("dialog.title"));
+        assertEquals("<yellow>Not Slime Chunk - custom", config.getString("messages.normal-chunk"));
+        assertEquals("<green>自定义 <x> <z>", config.getString("messages.in-slime-chunk"));
+    }
+
+    private static YamlConfiguration resource(String name) throws Exception {
+        try (var stream = ConfigMigrationTest.class.getResourceAsStream("/" + name)) {
+            assertNotNull(stream);
+            return YamlConfiguration.loadConfiguration(new java.io.InputStreamReader(
+                    stream, java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    @Test void translatesPreviousDefaultsOnceAndPreservesSettings() throws Exception {
+        var config = resource("config-v2-en.yml");
+        var defaults = resource("config.yml");
+        config.set("item.enabled", false);
+        config.set("visualization.radius", 3);
+        assertTrue(ConfigMigration.merge(config, defaults));
+        assertEquals(4, config.getInt("config-version"));
+        assertEquals("<red>关闭", config.getString("dialog.close-button"));
+        for (String key : defaults.getKeys(true)) {
+            if (key.startsWith("messages.") && defaults.isString(key)) {
+                assertEquals(defaults.getString(key), config.getString(key), key);
+            }
+        }
+        assertFalse(config.getBoolean("item.enabled"));
+        assertEquals(3, config.getInt("visualization.radius"));
+        assertFalse(ConfigMigration.merge(config, defaults));
+        // After the one-time upgrade, an administrator can deliberately choose English.
+        config.set("dialog.close-button", "<red>Close");
+        assertFalse(ConfigMigration.merge(config, defaults));
+        assertEquals("<red>Close", config.getString("dialog.close-button"));
+    }
+
+    @Test void localizationPreservesCustomMessagesAndAddsNoticeComments() throws Exception {
+        var config = resource("config-v2-en.yml");
+        var defaults = resource("config.yml");
+        config.set("messages.in-slime-chunk", "<green>服主自定义 <x>, <z>");
+        config.set("messages.not-in-slime-chunk", "<red>Custom English");
+        config.set("dialog.title", "<gold>我的地图");
+        config.set("unrelated", "keep");
+        assertTrue(ConfigMigration.merge(config, defaults));
+        assertEquals("<green>服主自定义 <x>, <z>", config.getString("messages.in-slime-chunk"));
+        assertEquals("<red>Custom English", config.getString("messages.not-in-slime-chunk"));
+        assertEquals("<gold>我的地图", config.getString("dialog.title"));
+        assertEquals("keep", config.getString("unrelated"));
+        assertTrue(config.getString("messages.spawn-notice", "").contains("不保证"));
+        assertFalse(config.getComments("messages.spawn-notice").isEmpty());
+    }
+
+    @Test void chineseDefaultsRenderCoordinatePlaceholders() throws Exception {
+        var defaults = resource("config.yml");
+        var actual = MiniMessage.miniMessage().deserialize(defaults.getString("messages.in-slime-chunk"),
+                Placeholder.unparsed("x", "-32"), Placeholder.unparsed("z", "48"));
+        assertEquals("当前位置属于史莱姆区块（X: -32，Z: 48）。",
+                PlainTextComponentSerializer.plainText().serialize(actual));
+    }
+
     @Test void preservesDisabledLegacyItem() throws Exception {
         var old = new YamlConfiguration();
         old.loadFromString("enableSlimeMapItem: false\nslimeMapItem: STICK\ncustom: keep\n");

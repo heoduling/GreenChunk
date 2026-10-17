@@ -7,6 +7,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CompletableFuture;
+import th.in.midnight_network.greenchunk.lifecycle.HotReloadSupport;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -34,7 +36,11 @@ public final class ChunkVisualizationService implements Listener {
     private final Map<UUID, Map<ChunkKey, List<Entity>>> displays = new ConcurrentHashMap<>();
     private final Map<UUID, ScheduledTask> tasks = new ConcurrentHashMap<>();
     private final Map<UUID, ViewState> states = new ConcurrentHashMap<>();
+    private final Map<UUID, ViewState> anchors = new ConcurrentHashMap<>();
     private final Set<UUID> pending = ConcurrentHashMap.newKeySet();
+    private final Set<Entity> ownedEntities = ConcurrentHashMap.newKeySet();
+    private final Map<Entity, CompletableFuture<Void>> removals = new ConcurrentHashMap<>();
+    private volatile boolean closing;
 
     public ChunkVisualizationService(Plugin plugin, ConfigService configs, SlimeChunkService slimeChunks,
                                      VisualizationStateStore stateStore) {
@@ -49,6 +55,7 @@ public final class ChunkVisualizationService implements Listener {
     }
 
     public void toggle(Player player) {
+        if (closing) return;
         UUID playerId = player.getUniqueId();
         if (stateStore.isEnabled(playerId)) {
             stateStore.setEnabled(playerId, false);
@@ -57,23 +64,47 @@ public final class ChunkVisualizationService implements Listener {
         } else {
             stateStore.setEnabled(playerId, true);
             start(player);
-            player.sendMessage(configs.current().messages().visualizationEnabled());
+            player.sendMessage(configs.current().messages().visualizationEnabled()
+                    .append(net.kyori.adventure.text.Component.newline())
+                    .append(configs.current().messages().spawnNotice()));
         }
     }
 
     public void stopAll() {
+        closing = true;
         List.copyOf(displays.keySet()).forEach(this::stop);
+    }
+
+    public void stopAccepting() { closing = true; }
+
+    /** Called after every online player's owner barrier, so no spawn can still be publishing. */
+    public CompletableFuture<Void> removeForUnload() {
+        stopAll();
+        var work = List.copyOf(ownedEntities).stream().map(this::removeEntity).toArray(CompletableFuture<?>[]::new);
+        return CompletableFuture.allOf(work).thenRun(() -> {
+            pending.clear();
+            if (!ownedEntities.isEmpty()) throw new IllegalStateException("三维显示实体尚未清理完成");
+        });
+    }
+
+    public void restoreOnlinePlayers() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            HotReloadSupport.onOwner(plugin, player, () -> restore(player));
+        }
+    }
+
+    private void restore(Player player) {
+        if (!closing && stateStore.isEnabled(player.getUniqueId()) && player.hasPermission("greenchunk.visual")) start(player);
     }
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        if (stateStore.isEnabled(player.getUniqueId()) && player.hasPermission("greenchunk.visual")) {
-            start(player);
-        }
+        restore(event.getPlayer());
     }
 
     public void reloadActive() {
+        slimeChunks.invalidate();
+        if (closing) return;
         for (UUID playerId : List.copyOf(displays.keySet())) {
             Player player = Bukkit.getPlayer(playerId);
             if (player == null) {
@@ -81,6 +112,7 @@ public final class ChunkVisualizationService implements Listener {
                 continue;
             }
             player.getScheduler().run(plugin, task -> {
+                if (closing) return;
                 Map<ChunkKey, List<Entity>> active = displays.get(playerId);
                 if (active == null) {
                     return;
@@ -98,6 +130,7 @@ public final class ChunkVisualizationService implements Listener {
     }
 
     private void start(Player player) {
+        if (closing) return;
         UUID playerId = player.getUniqueId();
         stop(playerId);
         displays.put(playerId, new ConcurrentHashMap<>());
@@ -113,6 +146,7 @@ public final class ChunkVisualizationService implements Listener {
     }
 
     private void refresh(Player player, boolean force) {
+        if (closing) return;
         UUID playerId = player.getUniqueId();
         Map<ChunkKey, List<Entity>> active = displays.get(playerId);
         if (active == null) {
@@ -132,23 +166,37 @@ public final class ChunkVisualizationService implements Listener {
         int radius = configs.current().visualization().radius();
         slimeChunks.scan(world, centerX - radius, centerZ - radius, radius * 2 + 1, radius * 2 + 1)
                 .whenComplete((values, error) -> {
-            if (!plugin.isEnabled()) { pending.remove(playerId); return; }
+            if (closing || !plugin.isEnabled()) { pending.remove(playerId); return; }
             try {
                 var task = player.getScheduler().run(plugin, ignored -> {
                     pending.remove(playerId);
+                    if (closing) return;
                     if (displays.get(playerId) != active || configs.current() != config) return;
                     var now = player.getLocation();
                     if (now.getWorld() != world || now.getBlockX() >> 4 != centerX || now.getBlockZ() >> 4 != centerZ) return;
                     if (error != null) {
                         stop(playerId);
-                        plugin.getLogger().warning("Slime overlay query failed: " + error);
+                        plugin.getLogger().warning("史莱姆区块三维显示查询失败：" + error);
                         return;
                     }
-                    for (ChunkKey existing : new ArrayList<>(active.keySet())) removeCell(playerId, existing);
+                    var anchor = anchors.get(playerId);
+                    // Display entities are anchored near the player, not at their transformed volume.
+                    // Re-anchor every two chunks so retained entities stay in the minimum tracking range.
+                    boolean reanchor = anchor == null || !anchor.worldId.equals(next.worldId)
+                            || Math.abs((long) anchor.chunkX - centerX) > 1
+                            || Math.abs((long) anchor.chunkZ - centerZ) > 1;
+                    for (ChunkKey existing : new ArrayList<>(active.keySet())) {
+                        if (reanchor || !existing.worldId.equals(next.worldId)
+                                || !Boolean.TRUE.equals(values.get(new SlimeChunkService.ChunkPos(existing.x, existing.z)))) {
+                            removeCell(playerId, existing);
+                        }
+                    }
+                    if (reanchor) anchors.put(playerId, next);
                     states.put(playerId, next);
                     values.forEach((pos, slime) -> {
                         if (slime) {
                             var chunk = new ChunkKey(world.getUID(), pos.x(), pos.z());
+                            if (active.containsKey(chunk)) return;
                             active.put(chunk, new CopyOnWriteArrayList<>());
                             spawnCell(player, world, chunk, now);
                         }
@@ -176,6 +224,7 @@ public final class ChunkVisualizationService implements Listener {
             display.setDisplayWidth(configs.current().visualization().radius() * 32.0F + 16.0F);
             display.setDisplayHeight(worldHeight);
         });
+        ownedEntities.add(volume);
         track(player, chunk, volume);
 
     }
@@ -211,6 +260,7 @@ public final class ChunkVisualizationService implements Listener {
         List<Entity> cell = active == null ? null : active.get(chunk);
         if (cell == null) {
             entity.remove();
+            ownedEntities.remove(entity);
             return;
         }
         cell.add(entity);
@@ -224,6 +274,7 @@ public final class ChunkVisualizationService implements Listener {
             task.cancel();
         }
         states.remove(playerId);
+        anchors.remove(playerId);
         Map<ChunkKey, List<Entity>> active = displays.remove(playerId);
         if (active != null) {
             active.values().forEach(this::removeEntities);
@@ -243,14 +294,23 @@ public final class ChunkVisualizationService implements Listener {
         entities.clear();
     }
 
-    private void removeEntity(Entity entity) {
-        // Bukkit marks the plugin disabled before onDisable is invoked. Folia
-        // rejects any newly registered entity task at that point. Displays are
-        // non-persistent, so server shutdown/world unload will discard them.
+    private CompletableFuture<Void> removeEntity(Entity entity) {
+        // Supported PlugMan commands drain before disable. Normal server shutdown
+        // discards non-persistent entities; direct API hot-disable is not supported.
         if (!plugin.isEnabled()) {
-            return;
+            return CompletableFuture.failedFuture(new IllegalStateException("插件已停用，无法调度显示实体清理"));
         }
-        entity.getScheduler().run(plugin, task -> entity.remove(), null);
+        var result = new CompletableFuture<Void>();
+        var previous = removals.putIfAbsent(entity, result);
+        if (previous != null) return previous;
+        HotReloadSupport.onOwner(plugin, entity, entity::remove).whenComplete((ignored, error) -> {
+            if (error == null) {
+                ownedEntities.remove(entity);
+                result.complete(null);
+            } else result.completeExceptionally(error);
+            removals.remove(entity, result);
+        });
+        return result;
     }
 
     private static Transformation transformation(float x, float y, float z,
