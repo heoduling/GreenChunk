@@ -1,4 +1,6 @@
 # GreenChunk 2 configuration. Text supports MiniMessage formatting.
+config-version: 2
+# Legacy item enable/material and messages are migrated automatically on first start.
 item:
   enabled: true
   material: SLIME_BALL
@@ -12,8 +14,10 @@ dialog:
   close-tooltip: '<gray>Close the slime-chunk map'
 
 visualization:
-  radius: 5
-  refresh-ticks: 4
+  # 1..4 chunks. Queries use the server rules and can asynchronously load/generate terrain.
+  radius: 4
+  # Minimum 5 ticks; only one query per player is allowed in flight.
+  refresh-ticks: 5
   block-material: LIME_STAINED_GLASS
   view-range: 128.0
 

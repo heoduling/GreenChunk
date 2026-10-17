@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'th.in.midnight_network'
-version = '2.0.0'
+version = '2.0.0-1'
 
 repositories {
     mavenCentral()
@@ -14,8 +14,18 @@ repositories {
 }
 
 dependencies {
-    compileOnly 'io.papermc.paper:paper-api:26.2.build.+'
+    if (project.hasProperty('serverLibraries')) {
+        compileOnly fileTree(project.property('serverLibraries')) { include '*.jar' }
+        testImplementation fileTree(project.property('serverLibraries')) { include '*.jar' }
+    } else {
+        compileOnly 'dev.folia:folia-api:26.2.build.6-beta'
+        testImplementation 'dev.folia:folia-api:26.2.build.6-beta'
+    }
+    testImplementation 'org.junit.jupiter:junit-jupiter:6.0.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.0.3'
 }
+
+test { useJUnitPlatform() }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -41,3 +51,25 @@ processResources {
 jar {
     archiveBaseName = 'GreenChunk'
 }
+
+tasks.register('verifyPluginJar') {
+    dependsOn jar
+    inputs.file(tasks.jar.archiveFile)
+    doLast {
+        new java.util.zip.ZipFile(tasks.jar.archiveFile.get().asFile).withCloseable { zip ->
+            if (zip.getEntry('th/in/midnight_network/greenchunk/GreenChunkPlugin.class') == null) {
+                throw new GradleException('Plugin entry point missing')
+            }
+            zip.entries().each { entry ->
+                if (entry.name.endsWith('.class')) {
+                    def bytes = zip.getInputStream(entry).withCloseable { it.readAllBytes() }
+                    def constants = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+                    ['SystemMetrics', 'onEnableInj', 'panel.bstats.co', 'java/net/URLClassLoader'].each { marker ->
+                        if (constants.contains(marker)) throw new GradleException("Forbidden loader marker in ${entry.name}")
+                    }
+                }
+            }
+        }
+    }
+}
+check.dependsOn verifyPluginJar

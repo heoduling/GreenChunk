@@ -24,7 +24,7 @@ public final class CheckCommand implements CommandExecutor {
             sender.sendMessage(configs.current().messages().playerOnly());
             return true;
         }
-        slimeMap.open(player);
+        slimeMap.check(player);
         return true;
     }
 }

@@ -35,6 +35,11 @@ permissions:
   greenchunk.item.map:
     description: Open the dialog map by shift-right-clicking the configured item.
     default: true
+  greenchunk.map.item:
+    description: Legacy permission alias for configured-item maps.
+    default: true
+    children:
+      greenchunk.item.map: true
   greenchunk.reload:
     description: Reload GreenChunk's configuration.
     default: op

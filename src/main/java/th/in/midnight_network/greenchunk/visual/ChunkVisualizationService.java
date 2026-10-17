@@ -1,7 +1,6 @@
 package th.in.midnight_network.greenchunk.visual;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,6 +34,7 @@ public final class ChunkVisualizationService implements Listener {
     private final Map<UUID, Map<ChunkKey, List<Entity>>> displays = new ConcurrentHashMap<>();
     private final Map<UUID, ScheduledTask> tasks = new ConcurrentHashMap<>();
     private final Map<UUID, ViewState> states = new ConcurrentHashMap<>();
+    private final Set<UUID> pending = ConcurrentHashMap.newKeySet();
 
     public ChunkVisualizationService(Plugin plugin, ConfigService configs, SlimeChunkService slimeChunks,
                                      VisualizationStateStore stateStore) {
@@ -68,7 +68,7 @@ public final class ChunkVisualizationService implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (stateStore.isEnabled(player.getUniqueId())) {
+        if (stateStore.isEnabled(player.getUniqueId()) && player.hasPermission("greenchunk.visual")) {
             start(player);
         }
     }
@@ -85,11 +85,8 @@ public final class ChunkVisualizationService implements Listener {
                 if (active == null) {
                     return;
                 }
-                for (ChunkKey chunk : new ArrayList<>(active.keySet())) {
-                    removeCell(playerId, chunk);
-                }
-                states.remove(playerId);
-                refresh(player, true);
+                stop(playerId);
+                start(player);
             }, () -> stop(playerId));
         }
     }
@@ -102,14 +99,17 @@ public final class ChunkVisualizationService implements Listener {
 
     private void start(Player player) {
         UUID playerId = player.getUniqueId();
+        stop(playerId);
         displays.put(playerId, new ConcurrentHashMap<>());
         refresh(player, true);
         long period = configs.current().visualization().refreshTicks();
-        tasks.put(playerId, player.getScheduler().runAtFixedRate(plugin,
+        var scheduled = player.getScheduler().runAtFixedRate(plugin,
                 task -> refresh(player, false),
                 () -> stop(playerId),
                 period,
-                period));
+                period);
+        if (scheduled != null) tasks.put(playerId, scheduled);
+        else stop(playerId);
     }
 
     private void refresh(Player player, boolean force) {
@@ -127,33 +127,38 @@ public final class ChunkVisualizationService implements Listener {
         if (!force && next.equals(states.get(playerId))) {
             return;
         }
-        states.put(playerId, next);
-
-        Set<ChunkKey> wanted = wantedSlimeChunks(world, centerX, centerZ);
-        for (ChunkKey existing : new ArrayList<>(active.keySet())) {
-            if (!wanted.contains(existing)) {
-                removeCell(playerId, existing);
-            }
-        }
-
-        for (ChunkKey chunk : wanted) {
-            if (active.putIfAbsent(chunk, new CopyOnWriteArrayList<>()) == null) {
-                spawnCell(player, world, chunk, playerLocation);
-            }
-        }
-    }
-
-    private Set<ChunkKey> wantedSlimeChunks(World world, int centerX, int centerZ) {
+        if (!pending.add(playerId)) return;
+        var config = configs.current();
         int radius = configs.current().visualization().radius();
-        Set<ChunkKey> wanted = new HashSet<>();
-        for (int chunkX = centerX - radius; chunkX <= centerX + radius; chunkX++) {
-            for (int chunkZ = centerZ - radius; chunkZ <= centerZ + radius; chunkZ++) {
-                if (slimeChunks.isSlimeChunk(world, chunkX, chunkZ)) {
-                    wanted.add(new ChunkKey(world.getUID(), chunkX, chunkZ));
-                }
+        slimeChunks.scan(world, centerX - radius, centerZ - radius, radius * 2 + 1, radius * 2 + 1)
+                .whenComplete((values, error) -> {
+            if (!plugin.isEnabled()) { pending.remove(playerId); return; }
+            try {
+                var task = player.getScheduler().run(plugin, ignored -> {
+                    pending.remove(playerId);
+                    if (displays.get(playerId) != active || configs.current() != config) return;
+                    var now = player.getLocation();
+                    if (now.getWorld() != world || now.getBlockX() >> 4 != centerX || now.getBlockZ() >> 4 != centerZ) return;
+                    if (error != null) {
+                        stop(playerId);
+                        plugin.getLogger().warning("Slime overlay query failed: " + error);
+                        return;
+                    }
+                    for (ChunkKey existing : new ArrayList<>(active.keySet())) removeCell(playerId, existing);
+                    states.put(playerId, next);
+                    values.forEach((pos, slime) -> {
+                        if (slime) {
+                            var chunk = new ChunkKey(world.getUID(), pos.x(), pos.z());
+                            active.put(chunk, new CopyOnWriteArrayList<>());
+                            spawnCell(player, world, chunk, now);
+                        }
+                    });
+                }, () -> pending.remove(playerId));
+                if (task == null) pending.remove(playerId);
+            } catch (org.bukkit.plugin.IllegalPluginAccessException disabled) {
+                pending.remove(playerId);
             }
-        }
-        return wanted;
+        });
     }
 
     private void spawnCell(Player player, World world, ChunkKey chunk, Location anchor) {
@@ -209,16 +214,8 @@ public final class ChunkVisualizationService implements Listener {
             return;
         }
         cell.add(entity);
-        player.getScheduler().run(plugin,
-                task -> {
-                    Map<ChunkKey, List<Entity>> latest = displays.get(playerId);
-                    if (latest != null && latest.containsKey(chunk)) {
-                        player.showEntity(plugin, entity);
-                    } else {
-                        removeEntity(entity);
-                    }
-                },
-                () -> removeEntity(entity));
+        // Spawn and visibility already run on the player's owning region.
+        player.showEntity(plugin, entity);
     }
 
     private void stop(UUID playerId) {

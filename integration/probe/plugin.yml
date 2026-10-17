@@ -1,0 +1,9 @@
+name: GreenChunkProbe
+version: '1'
+main: integration.GreenChunkProbe
+api-version: '26.2'
+folia-supported: true
+depend: [GreenChunk]
+commands:
+  gcprobe:
+    description: Isolated test probe only.

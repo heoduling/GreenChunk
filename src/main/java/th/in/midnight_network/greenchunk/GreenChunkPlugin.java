@@ -18,6 +18,7 @@ public final class GreenChunkPlugin extends JavaPlugin {
     private ConfigService configService;
     private ChunkVisualizationService visualization;
     private VisualizationStateStore visualizationState;
+    private SlimeChunkService slimeChunks;
 
     @Override
     public void onEnable() {
@@ -25,11 +26,11 @@ public final class GreenChunkPlugin extends JavaPlugin {
         configService = new ConfigService(this);
         configService.reload();
 
-        var slimeChunks = new SlimeChunkService();
+        slimeChunks = new SlimeChunkService(this);
         visualizationState = new VisualizationStateStore(this);
         visualizationState.load();
         visualization = new ChunkVisualizationService(this, configService, slimeChunks, visualizationState);
-        var slimeMap = new SlimeMapService(configService, slimeChunks);
+        var slimeMap = new SlimeMapService(this, configService, slimeChunks);
 
         command("slime").setExecutor(new CheckCommand(configService, slimeMap));
         command("slimemap").setExecutor(new MapCommand(configService, slimeMap));
@@ -45,6 +46,7 @@ public final class GreenChunkPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (slimeChunks != null) slimeChunks.close();
         if (visualization != null) {
             visualization.stopAll();
         }

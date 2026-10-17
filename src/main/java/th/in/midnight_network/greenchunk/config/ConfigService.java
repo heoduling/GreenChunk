@@ -1,6 +1,11 @@
 package th.in.midnight_network.greenchunk.config;
 
 import java.util.Locale;
+import java.io.InputStreamReader;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import org.bukkit.configuration.file.YamlConfiguration;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
@@ -22,6 +27,18 @@ public final class ConfigService {
 
     public void reload() {
         plugin.reloadConfig();
+        var config = plugin.getConfig();
+        var backup = plugin.getDataFolder().toPath().resolve("config-v1-backup.yml");
+        try (var stream = plugin.getResource("config.yml")) {
+            if (stream == null) throw new IllegalStateException("Missing default config.yml");
+            if (config.contains("enableSlimeMapItem", true) && !Files.exists(backup)) {
+                Files.copy(plugin.getDataFolder().toPath().resolve("config.yml"), backup);
+            }
+            var defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            if (ConfigMigration.merge(config, defaults)) plugin.saveConfig();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not migrate GreenChunk configuration", exception);
+        }
         current = read(plugin.getConfig());
     }
 

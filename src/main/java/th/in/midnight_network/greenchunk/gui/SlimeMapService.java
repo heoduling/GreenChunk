@@ -2,6 +2,14 @@ package th.in.midnight_network.greenchunk.gui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.Location;
+import th.in.midnight_network.greenchunk.config.PluginConfig;
+import th.in.midnight_network.greenchunk.slime.SlimeChunkService.ChunkPos;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.DialogBase;
@@ -16,25 +24,72 @@ import th.in.midnight_network.greenchunk.config.ConfigService;
 import th.in.midnight_network.greenchunk.slime.SlimeChunkService;
 
 public final class SlimeMapService {
+    private final Plugin plugin;
+    private final Set<UUID> pending = ConcurrentHashMap.newKeySet();
     private final ConfigService configs;
     private final SlimeChunkService slimeChunks;
 
-    public SlimeMapService(ConfigService configs, SlimeChunkService slimeChunks) {
+    public SlimeMapService(Plugin plugin, ConfigService configs, SlimeChunkService slimeChunks) {
+        this.plugin = plugin;
         this.configs = configs;
         this.slimeChunks = slimeChunks;
     }
 
     public void open(Player player) {
-        var config = configs.current();
-        int width = config.dialog().width();
-        int height = config.dialog().height();
+        request(player, false);
+    }
 
+    public void check(Player player) {
+        request(player, true);
+    }
+
+    private void request(Player player, boolean checkOnly) {
+        UUID id = player.getUniqueId();
+        if (!pending.add(id)) return;
+        var config = configs.current();
+        int width = checkOnly ? 1 : config.dialog().width();
+        int height = checkOnly ? 1 : config.dialog().height();
         var location = player.getLocation();
         World world = location.getWorld();
         int centerX = location.getBlockX() >> 4;
         int centerZ = location.getBlockZ() >> 4;
         int rotation = Math.floorMod(Math.round(location.getYaw() / 90.0F), 4);
-        boolean currentIsSlime = slimeChunks.isSlimeChunk(world, centerX, centerZ);
+        List<ChunkPos> cells = new ArrayList<>();
+        for (int row = 0; row < height; row++) for (int column = 0; column < width; column++) {
+            int x = column - width / 2, z = row - height / 2;
+            cells.add(new ChunkPos(centerX + rotateX(x, z, rotation), centerZ + rotateZ(x, z, rotation)));
+        }
+        int minX = cells.stream().mapToInt(ChunkPos::x).min().orElseThrow();
+        int maxX = cells.stream().mapToInt(ChunkPos::x).max().orElseThrow();
+        int minZ = cells.stream().mapToInt(ChunkPos::z).min().orElseThrow();
+        int maxZ = cells.stream().mapToInt(ChunkPos::z).max().orElseThrow();
+        slimeChunks.scan(world, minX, minZ, maxX - minX + 1, maxZ - minZ + 1).whenComplete((values, error) -> {
+            if (!plugin.isEnabled()) { pending.remove(id); return; }
+            try {
+                var task = player.getScheduler().run(plugin, ignored -> {
+                    pending.remove(id);
+                    var now = player.getLocation();
+                    if (now.getWorld() != world || now.getBlockX() >> 4 != centerX
+                            || now.getBlockZ() >> 4 != centerZ || configs.current() != config) return;
+                    if (error != null) {
+                        player.sendMessage(Component.text("区块查询暂时失败，请稍后重试。", NamedTextColor.RED));
+                        plugin.getLogger().warning("Slime chunk query failed: " + error);
+                        return;
+                    }
+                    if (checkOnly) player.sendMessage(configs.slimeResult(values.get(new ChunkPos(centerX, centerZ)),
+                            location.getBlockX(), location.getBlockZ()));
+                    else show(player, config, location, values);
+                }, () -> pending.remove(id));
+                if (task == null) pending.remove(id);
+            } catch (org.bukkit.plugin.IllegalPluginAccessException disabled) { pending.remove(id); }
+        });
+    }
+
+    private void show(Player player, PluginConfig config, Location location, Map<ChunkPos, Boolean> values) {
+        int width = config.dialog().width(), height = config.dialog().height();
+        int centerX = location.getBlockX() >> 4, centerZ = location.getBlockZ() >> 4;
+        int rotation = Math.floorMod(Math.round(location.getYaw() / 90.0F), 4);
+        boolean currentIsSlime = values.get(new ChunkPos(centerX, centerZ));
         Component status = configs.slimeResult(currentIsSlime, location.getBlockX(), location.getBlockZ());
         List<ActionButton> cells = new ArrayList<>(width * height);
 
@@ -45,7 +100,7 @@ public final class SlimeMapService {
                 int chunkX = centerX + rotateX(screenX, screenZ, rotation);
                 int chunkZ = centerZ + rotateZ(screenX, screenZ, rotation);
                 boolean current = chunkX == centerX && chunkZ == centerZ;
-                boolean slime = slimeChunks.isSlimeChunk(world, chunkX, chunkZ);
+                boolean slime = values.get(new ChunkPos(chunkX, chunkZ));
                 cells.add(cell(chunkX, chunkZ, slime, current));
             }
         }
